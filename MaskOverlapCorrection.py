@@ -13,7 +13,8 @@ from scipy.ndimage import gaussian_filter
 
 from skimage import measure
 
-
+import shapely.plotting
+from shapely.geometry import Polygon
 
 def contour_mask(mask, ax, color):
     '''
@@ -64,7 +65,7 @@ def create_circular_mask(h, w, center=None, radius=None):
 
 def spect_mask(organ_mask, expanded_mask, secondary_mask):
 
-
+    ''' Mask that recovers the actual activity '''
     
     
     return expanded_mask > 0.5
@@ -81,7 +82,9 @@ SIGMA = 15
 
 small_dist = 360
 
-small_radius = 50
+small_radius = 40
+
+
 
 
 
@@ -117,32 +120,67 @@ fig.set_figheight(8)
 fig.set_figwidth(16)
 
 
-''' Mask that recovers the actual activity 
 
+
+
+
+'''
 Create a line between the two overlapping masks representing 50% on either side from each intersection point.
 
 This might be achievable by creating a matrix of points that divides the intersection in two.
-Could use a vector whose origin is the intersection origin plus the radius of the smaller circle
-and whose radius is the smaller one plus 1/3 the larger radius.
+Could use a vector whose origin is the intersection origin plus the average radius 
+and whose radius is the average radius.
 '''
-
-'intersection = expanded_mask.intersection(secondary_mask)'
 
 
 '''Elijahs code'''
 center1 = 200
-radius1 = 110
-center2 = small_dist*1.25
+radius1 = 110*1.25
+center2 = small_dist
 radius2 = small_radius*1.35
 
-center3 = (center2 + center1 + radius1 - radius2)/2 + radius2
+center3 = (center2 + center1 + radius1 - radius2)/2 + (radius2 + radius1)/2
 
-radius3 = (radius2 + radius1/3)
+radius3 = (radius2 + radius1)/2
+
 L3 = create_circular_mask(500, 500, center = (center3,200), radius = radius3)
 
-ax1.imshow(L3)
 
 contour_mask(L3, ax2, 'blue')
+contour_mask(L3, ax1, 'blue')
+
+
+rows, cols = np.where(L3)
+L3coordinates = np.column_stack((cols, rows))
+
+
+rows, cols = np.where(mask_L2)
+L2coordinates = np.column_stack((cols, rows))
+
+rows, cols = np.where(mask_L1)
+L1coordinates = np.column_stack((cols, rows))
+
+
+"-----------------------------------------"
+"Calculating intersection regions"
+nrows, ncols = L1coordinates.shape
+dtype = {'names': ['f{}'.format(i) for i in range(ncols)], 'formats': ncols * [L1coordinates.dtype]}
+R_Intersection = np.intersect1d(L1coordinates.view(dtype), L3coordinates.view(dtype))
+R_Intersection = R_Intersection.view(L1coordinates.dtype).reshape(-1, ncols)
+
+"Shapely is used to display the intersection since contour mask isn't working."
+RIntersectionShape = Polygon(R_Intersection)
+
+shapely.plotting.plot_polygon(RIntersectionShape)
+
+
+
+'''Elijahs code'''
+
+
+
+
+
 
 ax1.imshow(L1+L2)
 
@@ -165,7 +203,6 @@ contour_mask(mask_spect2, ax2, 'black')
 masked_sum = np.sum(mask*(L1_G+L2_G))
 
 actual_sum = np.sum(L1)
-
 
 
 print('Large ROI masked vs actual counts: ', round(masked_sum/actual_sum, 2))
