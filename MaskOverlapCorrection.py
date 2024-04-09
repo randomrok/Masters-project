@@ -82,7 +82,7 @@ SIGMA = 15
 
 small_dist = 360
 
-small_radius = 40
+small_radius = 35
 
 
 
@@ -107,11 +107,6 @@ mask_L1  = create_circular_mask(500, 500, center=(200,200), radius=110*1.25)
 mask_L2  = create_circular_mask(500, 500, center=(small_dist,200), radius=small_radius*1.35)
 
 
-mask = spect_mask(L1, mask_L1, mask_L2)
-
-mask_spect2 = spect_mask(L2, mask_L2, mask_L1)
-
-
 
 fig, (ax1, ax2) = plt.subplots(1, 2)
 
@@ -124,6 +119,8 @@ fig.set_figwidth(16)
 
 
 
+'''Elijahs code'''
+
 '''
 Create a line between the two overlapping masks representing 50% on either side from each intersection point.
 
@@ -132,8 +129,6 @@ Could use a vector whose origin is the intersection origin plus the average radi
 and whose radius is the average radius.
 '''
 
-
-'''Elijahs code'''
 center1 = 200
 radius1 = 110*1.25
 center2 = small_dist
@@ -163,19 +158,73 @@ L1coordinates = np.column_stack((cols, rows))
 
 "-----------------------------------------"
 "Calculating intersection regions"
+
+"Right intersection coordinates"
 nrows, ncols = L1coordinates.shape
 dtype = {'names': ['f{}'.format(i) for i in range(ncols)], 'formats': ncols * [L1coordinates.dtype]}
-R_Intersection = np.intersect1d(L1coordinates.view(dtype), L3coordinates.view(dtype))
-R_Intersection = R_Intersection.view(L1coordinates.dtype).reshape(-1, ncols)
+R_IntersectionCoords = np.intersect1d(L1coordinates.view(dtype), L3coordinates.view(dtype))
+R_IntersectionCoords = R_IntersectionCoords.view(L1coordinates.dtype).reshape(-1, ncols)
 
-"Shapely is used to display the intersection since contour mask isn't working."
-RIntersectionShape = Polygon(R_Intersection)
+"Calculates whole intersection coordinates"
+nrows, ncols = L2coordinates.shape
+dtype = {'names': ['f{}'.format(i) for i in range(ncols)], 'formats': ncols * [L2coordinates.dtype]}
+IntersectionCoords = np.intersect1d(L2coordinates.view(dtype), L1coordinates.view(dtype))
+IntersectionCoords = IntersectionCoords.view(L2coordinates.dtype).reshape(-1, ncols)
 
-shapely.plotting.plot_polygon(RIntersectionShape)
+"Calculates set difference to find left intersection coordinates"
+nrows, ncols = IntersectionCoords.shape
+dtype = {'names': ['f{}'.format(i) for i in range(ncols)], 'formats': ncols * [IntersectionCoords.dtype]}
+L_IntersectionCoords = np.setdiff1d(IntersectionCoords.view(dtype), R_IntersectionCoords.view(dtype))
+L_IntersectionCoords = IntersectionCoords.view(L2coordinates.dtype).reshape(-1, ncols)
 
 
 
-'''Elijahs code'''
+"Can display the left and right regions from coordinates using shapely"
+'R_IntersectionShape = Polygon(R_IntersectionCoords)'
+'shapely.plotting.plot_polygon(R_IntersectionShape)'
+
+
+"-----------------------Something wrong here"
+"Converting coordinate matrix back to image matrix to extract data"
+L_Intersection = [L1_G[L_IntersectionCoords[r,1],L_IntersectionCoords[r,0]] + 
+                  L2_G[L_IntersectionCoords[r,1],L_IntersectionCoords[r,0]]
+                  for r,r in L_IntersectionCoords]
+L_Intersection = np.array(L_Intersection)
+
+'''contour_mask(L_Intersection, ax2, 'red')'''
+
+R_Intersection = [L1_G[R_IntersectionCoords[r,1],R_IntersectionCoords[r,0]] + 
+                  L2_G[R_IntersectionCoords[r,1],R_IntersectionCoords[r,0]] 
+                  for r,r in R_IntersectionCoords]
+R_Intersection = np.array(R_Intersection)
+
+Intersection = [L1_G[IntersectionCoords[r,1],IntersectionCoords[r,0]] + 
+                  L2_G[IntersectionCoords[r,1],IntersectionCoords[r,0]] 
+                  for r,r in IntersectionCoords]
+Intersection = np.array(Intersection)
+
+
+"mask is the ratio of counts from the L & R intersection regions"
+Lsum = np.sum(L_Intersection)
+Rsum = np.sum(R_Intersection)
+IntersectionSum = np.sum(Intersection)
+
+
+
+mask = Lsum / Rsum
+
+
+Small_masked_sum = np.sum((L1_G+L2_G)*mask_L2) - IntersectionSum/mask
+Large_masked_sum = np.sum((L1_G+L2_G)*mask_L1) - Lsum*mask
+
+actual_sum = np.sum(L1)
+
+print('Overlap correction Small ROI vs actual: ', round(Small_masked_sum/actual_sum, 2))
+
+actual_sum = np.sum(L2)
+
+print('Overlap correction Large ROI vs actual: ', round(Large_masked_sum/actual_sum, 2))
+''''Elijahs code'''
 
 
 
@@ -183,6 +232,10 @@ shapely.plotting.plot_polygon(RIntersectionShape)
 
 
 ax1.imshow(L1+L2)
+contour_mask(mask_L1, ax2, 'red')
+contour_mask(mask_L1, ax1, 'red')
+contour_mask(mask_L2, ax1, 'black')
+contour_mask(mask_L2, ax2, 'black')
 
 ax1.axis('off')
 
@@ -192,15 +245,8 @@ ax2.axis('off')
 
 
 
-contour_mask(mask, ax2, 'red')
 
-contour_mask(mask, ax1, 'red')
-
-contour_mask(mask_spect2, ax2, 'black')
-
-
-
-masked_sum = np.sum(mask*(L1_G+L2_G))
+masked_sum = np.sum((L1_G+L2_G))
 
 actual_sum = np.sum(L1)
 
@@ -209,12 +255,8 @@ print('Large ROI masked vs actual counts: ', round(masked_sum/actual_sum, 2))
 
 plt.title(round(masked_sum/actual_sum, 3))
 
- 
-
-masked_sum = np.sum(mask_spect2*(L1_G+L2_G))
 
 actual_sum = np.sum(L2)
-
  
 
 print('Small ROI masked vs actual counts: ', round(masked_sum/actual_sum, 2))
