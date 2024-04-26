@@ -129,6 +129,7 @@ IntersectionCoords = np.intersect1d(maskL1coordinates.view(dtype), maskL2coordin
 IntersectionCoords = IntersectionCoords.view(maskL1coordinates.dtype).reshape(-1, ncols)
 
 
+"MIDDLE OF INTERSECTION"
 'Uses the fact that the gradient of the pet image is a local minimum point at the middle of the intersection (see histogram)'
 'would need to add a way to check which direction the intersection region is in respect to the origin'
 PET_Image = gaussian_filter(L1.astype('float'), sigma=SIGMA) + gaussian_filter(L2.astype('float'), sigma=SIGMA)
@@ -167,7 +168,7 @@ centroid = (sum(x) / len(maskL1coordinates), sum(y) / len(maskL1coordinates))
 
 "Create an average of all those true values generated into a single line of values..? Performance increase..?"
 
-
+"LEFT INTERSECTION DIRECTION"
 LeftIntersection = np.zeros(size, dtype=float)
 MinimaCoordsXMin = min(LocalMinima[:,1])
 MinimaCoordsXMax = max(LocalMinima[:,1])
@@ -176,14 +177,18 @@ MinimaCoordsYMax = max(LocalMinima[:,0])
 "use the coordinates of the middle regoin to seperate the coordinates of the left and right regions"
 "This code seperates the left region"
 "Find a way to code populating the matrix from the left to right"
-for c in range(size[0]):
-    for d in range(size[1]): # Loop through entire image
-        if LocalMinima[d,c]: # Check for the LocalMinima points
-            for a in range(IntersectionCoords.shape[0]): # Loop through every intersection coordinate
-                if IntersectionCoords[a,0] < c and IntersectionCoords[a,1] < d: 
-                    # Check that the intersection coordinate is not greater than the LocalMinima coordinate
-                    LeftIntersection[IntersectionCoords[a,0], IntersectionCoords[a,1]] = PET_Image[IntersectionCoords[a,0], c] 
-                    # Set all points (Limited to intersection points and less than local minima) to the PET image
+for c in range(IntersectionCoordsXMin, IntersectionCoordsXMax):
+    for d in range(IntersectionCoordsYMin, IntersectionCoordsYMax): 
+    # Loop through entire image
+        if LocalMinima[d,c]:
+        # Check for the LocalMinima points
+            for a in range(IntersectionCoords.shape[0]):
+            # Loop through every intersection coordinate
+                if IntersectionCoords[a,1] == d and IntersectionCoords[a,0] < c: 
+                # Check that the intersection coordinate is not greater than the LocalMinima coordinate
+                    LeftIntersection[IntersectionCoords[a,0], IntersectionCoords[a,1]] = PET_Image[IntersectionCoords[a,0], IntersectionCoords[a,1]]
+                    # Set all points (Limited to intersection points and less than local minima) to the PET image. 
+                    # IntersectionCoords[a,0] == c leftIntersection matrix is updated only when the x coord is the same as the Localminia x coord
 
 plt.imshow(LeftIntersection)
 "-------------------------------"
