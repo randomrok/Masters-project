@@ -13,18 +13,6 @@ from scipy.ndimage import gaussian_filter
 
 from skimage import measure
 
-import math
-
-from scipy import ndimage as ndi
-
-from skimage.segmentation import watershed
-from skimage.feature import peak_local_max
-
-import shapely.plotting
-from shapely.geometry import Polygon
-
-import cv2
-
 def contour_mask(mask, ax, color):
 
     '''
@@ -89,6 +77,8 @@ SIGMA = 15
 
 small_dist = 360
 
+small_height = 200
+
 small_radius = 50
 
  
@@ -101,7 +91,7 @@ L1_G = gaussian_filter(L1.astype('float'), sigma=SIGMA)
 
 
 
-L2 = create_circular_mask(500, 500, center=(small_dist,200), radius=small_radius)
+L2 = create_circular_mask(500, 500, center=(small_dist,small_height), radius=small_radius)
 
 L2_G = gaussian_filter(L2.astype('float'), sigma=SIGMA)
 
@@ -109,12 +99,27 @@ L2_G = gaussian_filter(L2.astype('float'), sigma=SIGMA)
 
 mask_L1  = create_circular_mask(500, 500, center=(200,200), radius=110*1.25)
 
-mask_L2  = create_circular_mask(500, 500, center=(small_dist,200), radius=small_radius*1.35)
+mask_L2  = create_circular_mask(500, 500, center=(small_dist,small_height), radius=small_radius*1.35)
 
 
 
 
 "-------------------------------"
+"vestigial code used to show the histogram of the PET data and the local minima (origin of mask)"
+'''
+Section = PET_Image[250,:]
+plt.plot(Section)
+plt.show(plt)
+fig, (ax1) = plt.subplots(1)
+ax1.imshow(LocalMinima, vmin=0,vmax=1)
+'''
+
+"-------------------------------"
+'Uses the fact that the gradient of the pet image is a local minimum point at the middle of the intersection (see histogram)'
+"Uses the coordinates of the local minimum and the masks center to seperate the intersection regions into sections to be filled along +-x,+-y directions"
+
+"VARIABLE DECLERATIONS"
+
 "Obtains coordinates of masks"
 rows, cols = np.where(mask_L1)
 maskL1coordinates = np.column_stack((cols, rows))
@@ -128,10 +133,12 @@ dtype = {'names': ['f{}'.format(i) for i in range(ncols)], 'formats': ncols * [m
 IntersectionCoords = np.intersect1d(maskL1coordinates.view(dtype), maskL2coordinates.view(dtype))
 IntersectionCoords = IntersectionCoords.view(maskL1coordinates.dtype).reshape(-1, ncols)
 
+"Origin is the average of all points from mask"
+x = [p[0] for p in maskL2coordinates]
+y = [p[1] for p in maskL2coordinates]
+centroid = (sum(x) / len(maskL2coordinates), sum(y) / len(maskL2coordinates))
+Direction_Vector = tuple
 
-"MIDDLE OF INTERSECTION"
-'Uses the fact that the gradient of the pet image is a local minimum point at the middle of the intersection (see histogram)'
-'would need to add a way to check which direction the intersection region is in respect to the origin'
 PET_Image = gaussian_filter(L1.astype('float'), sigma=SIGMA) + gaussian_filter(L2.astype('float'), sigma=SIGMA)
 size = PET_Image.shape
 RateOfChange = np.ones(size, dtype=float)
@@ -142,66 +149,119 @@ IntersectionCoordsXMin = min(IntersectionCoords[:,0])
 IntersectionCoordsYMax = max(IntersectionCoords[:,1])
 IntersectionCoordsYMin = min(IntersectionCoords[:,1])
 
+L2Intersection = np.zeros(size, dtype=bool)
+
+RateOfChange = np.ones(size, dtype=float) # Resets the rate of change matrix and LocalMinima matrix
+LocalMinima = np.zeros(size, dtype=bool)
+HorizontalLocalMinima = np.zeros(size, dtype=bool)
+VerticalLocalMinima = np.zeros(size, dtype=bool)
+
+"FUNCTIONS"
+
+'Uses the fact that the gradient of the pet image is a local minimum point at the middle of the intersection (see histogram)'
 for a in range(size[0]-1):
     for b in range(size[1]-1):
-        dy = PET_Image[a,b] - PET_Image[a+1,b]
-        dx = PET_Image[a,b] - PET_Image[a,b+1]
+        dy = abs(PET_Image[a,b] - PET_Image[a+1,b])
+        dx = abs(PET_Image[a,b] - PET_Image[a,b+1])
+        RateOfChange[a,b] = dy + dx
+        
+        if a in range(IntersectionCoordsYMin, IntersectionCoordsYMax) and b in range(IntersectionCoordsXMin, IntersectionCoordsXMax):
+            if abs(RateOfChange[a,b]) < 0.001:
+                LocalMinima[a,b] = True
+                
+"calculates horizontal local minima matrix"
+for a in range(size[0]-1):
+    for b in range(size[1]-1):
+        dy = abs(PET_Image[a,b] - PET_Image[a+1,b])
+        dx = abs(PET_Image[a,b] - PET_Image[a,b+1])
         RateOfChange[a,b] = dx
         
         if a in range(IntersectionCoordsYMin, IntersectionCoordsYMax) and b in range(IntersectionCoordsXMin, IntersectionCoordsXMax):
             if abs(RateOfChange[a,b]) < 0.001:
-                LocalMinima[a,b] = 'true'
-            
-"vestigial code used to show the histogram of the PET data and the local minima"
-'''
-Section = PET_Image[250,:]
-plt.plot(Section)
-plt.show(plt)
-fig, (ax1) = plt.subplots(1)
-ax1.imshow(LocalMinima, vmin=0,vmax=1)
-'''
+                HorizontalLocalMinima[a,b] = True
+                
+"Calculates vertical local minima matrix"
+for a in range(size[0]-1):
+    for b in range(size[1]-1):
+        dy = abs(PET_Image[a,b] - PET_Image[a+1,b])
+        dx = abs(PET_Image[a,b] - PET_Image[a,b+1])
+        RateOfChange[a,b] = dy
+        
+        if a in range(IntersectionCoordsYMin, IntersectionCoordsYMax) and b in range(IntersectionCoordsXMin, IntersectionCoordsXMax):
+            if abs(RateOfChange[a,b]) < 0.001:
+                VerticalLocalMinima[a,b] = True
 
-"Origin is the average of all points from mask"
-x = [p[0] for p in maskL1coordinates]
-y = [p[1] for p in maskL1coordinates]
-centroid = (sum(x) / len(maskL1coordinates), sum(y) / len(maskL1coordinates))
 
-"Create an average of all those true values generated into a single line of values..? Performance increase..?"
+"COMBINED FILLING FUNCTION"
 
-"LEFT INTERSECTION DIRECTION"
-LeftIntersection = np.zeros(size, dtype=float)
-MinimaCoordsXMin = min(LocalMinima[:,1])
-MinimaCoordsXMax = max(LocalMinima[:,1])
-MinimaCoordsYMin = min(LocalMinima[:,0])
-MinimaCoordsYMax = max(LocalMinima[:,0])
-"use the coordinates of the middle regoin to seperate the coordinates of the left and right regions"
-"This code seperates the left region"
-"Find a way to code populating the matrix from the left to right"
+
 for c in range(IntersectionCoordsXMin, IntersectionCoordsXMax):
     for d in range(IntersectionCoordsYMin, IntersectionCoordsYMax): 
-    # Loop through entire image
+    # Loop through intersection coordinates region
         if LocalMinima[d,c]:
-        # Check for the LocalMinima points
-            for a in range(IntersectionCoords.shape[0]):
-            # Loop through every intersection coordinate
-                if IntersectionCoords[a,1] == d and IntersectionCoords[a,0] < c: 
-                # Check that the intersection coordinate is not greater than the LocalMinima coordinate
-                    LeftIntersection[IntersectionCoords[a,0], IntersectionCoords[a,1]] = PET_Image[IntersectionCoords[a,0], IntersectionCoords[a,1]]
-                    # Set all points (Limited to intersection points and less than local minima) to the PET image. 
-                    # IntersectionCoords[a,0] == c leftIntersection matrix is updated only when the x coord is the same as the Localminia x coord
+        # Check for the LocalMinima points "Use local minima coordinate with the direction from the origin of the mask to determine left and right/top and down filling direction"
+            Direction_Vector = np.subtract(np.array([c,d]), centroid)
+            Magnitude = np.linalg.norm(Direction_Vector)
+            Direction_Vector = Direction_Vector/Magnitude
+            
+            "LEFT FILLING DIRECTION"
+            if Direction_Vector[0] < 0 and abs(Direction_Vector[1]) < 0.5: # Check unit vector is to left and between 0.5 vertically
 
-plt.imshow(LeftIntersection)
+                for c in range(IntersectionCoordsXMin, IntersectionCoordsXMax):
+                    for d in range(IntersectionCoordsYMin, IntersectionCoordsYMax): 
+                    # Loop through intersection coordinates region
+                        if HorizontalLocalMinima[d,c]:
+                        # Check for the LocalMinima points
+                            for a in range(IntersectionCoords.shape[0]):
+                            # Loop through every intersection coordinate
+                                if IntersectionCoords[a,1] == d and IntersectionCoords[a,0] < c: 
+                                # Check that the intersection coordinate is not greater than the LocalMinima coordinate
+                                    L2Intersection[IntersectionCoords[a,1], IntersectionCoords[a,0]] = True
+                                    # Set all points (Limited to intersection points and less than local minima) to the PET image. 
+                                    # IntersectionCoords[a,1] == d leftIntersection matrix is updated only when the y coord is the same as the Localminia y coord
+            
+            "TOP FILLING DIRECTION"
+            if Direction_Vector[1] < 0 and abs(Direction_Vector[0]) < 0.5: # Check unit vector is pointing up and between 0.5 horizontally
+
+                "Uses vertical local minima matrix to seperate the intersection"
+                for c in range(IntersectionCoordsXMin, IntersectionCoordsXMax):
+                    for d in range(IntersectionCoordsYMin, IntersectionCoordsYMax): 
+                    # Loop through intersection coordinates region
+                        if VerticalLocalMinima[d,c]:
+                        # Check for the LocalMinima points
+                            for a in range(IntersectionCoords.shape[0]):
+                            # Loop through every intersection coordinate
+                                if IntersectionCoords[a,0] == c and IntersectionCoords[a,1] < d: #check it is the first local minima with that x coord
+                                    L2Intersection[IntersectionCoords[a,1], IntersectionCoords[a,0]] = True
+                                    # Set all points (Limited to intersection points and less than local minima) to the PET image. 
+                                    # IntersectionCoords[a,0] == c leftIntersection matrix is updated only when the x coord is the same as the Localminia x coord
+
+
+"CALCULATES NEW MASKS"
+"RIGHT MASK"
+mask_spect2 = mask_L2 ^ L2Intersection
+
+
+"SET INTERSECTION"
+Intersection = mask_L1 ^ mask_L2
+Intersection = Intersection ^ (mask_L1 + mask_L2)
+
+"SET DIFFERENCE TO OBTAIN LEFT MASK"
+RightIntersection = Intersection ^ L2Intersection
+
+"LEFT MASK"
+mask = mask_L1 ^ RightIntersection
+
+
+
+plt.imshow(L2Intersection)
+"Rename to L1 intersection and L2 intersection to combine functions"
+"Can calculate the total mask data from the original mask using the set difference between the calculated one and L2 for example"
+"Calculate the fill direction based off individual coordinates to avoid problems at angles"
+"Calculate the average"
+"Performance issues likely due to looping where is unneccessary"
 "-------------------------------"
 
-
-
-
-
-mask = spect_mask(L1, mask_L1, mask_L2)
-
-mask_spect2 = spect_mask(L2, mask_L2, mask_L1)
-
- 
 
 fig, (ax1, ax2) = plt.subplots(1, 2)
 
