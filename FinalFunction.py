@@ -371,9 +371,6 @@ def checkPath(matrix, i, j,
 # Then, it determines the direction from the center of the first mask to the centroid of the intersection 
 # and fills the intersection with True values. The True values stop at half the distance between the furthest pathmatrix True value.
 
-# This could be better implemented by using a function to average the values in the matrix in the direction 
-# of the first mask to the centroid of the intersection, instead of vertically or horizontally.
-
 "-------------------------------------------------------------------------------------"
 def CustomSegmentation(kidney, OverlapOrgan, PET_Image):
     
@@ -397,12 +394,12 @@ def CustomSegmentation(kidney, OverlapOrgan, PET_Image):
     
     # uses path finder and stepminus to subtract until there is a path, speed is inverse to stepsize and accuracy
     def Watershed(image):
-        stepsize = np.amax(image*Intersection)/10
+        stepsize = np.amax(image*Intersection)/20
         imageMatrix = image * Intersection + ((np.ones(image.shape, dtype=bool) ^ Intersection)*(np.amax(image*Intersection)+2*stepsize)) # set equal to ones everywhere outside intersection
         PathMatrix = ndarray.copy(imageMatrix)
         pathMask = np.zeros(image.shape, dtype=bool)
         
-        for i in range(10):
+        for i in range(20):
             imageMatrix = StepMinus(imageMatrix, stepsize) # Subtract 'stepsize' from all pixels
             PathMatrix = ndarray.copy(imageMatrix) # Matrix for checking path
             
@@ -436,14 +433,14 @@ def CustomSegmentation(kidney, OverlapOrgan, PET_Image):
                 PathMatrix[y_start, x_start] = 1 # 'Starting cell'
                 PathMatrix[y_end, x_end] = 2 # 'Destination cell'
             
-        # If there is a path, then loop through the image and create a mask from the zero values
-        if isPath(PathMatrix, PathMatrix.shape[0]):
-            for a in range(PET_Image.shape[0]):
-                for b in range(PET_Image.shape[1]):
-                    if imageMatrix[a,b] == 0:
-                        pathMask[a,b] = True
-                    else: pathMask[a,b] = False
-            return pathMask
+            # If there is a path, then loop through the image and create a mask from the zero values, otherwise simply return the original intersection
+            if isPath(PathMatrix, PathMatrix.shape[0]):
+                for a in range(PET_Image.shape[0]):
+                    for b in range(PET_Image.shape[1]):
+                        if imageMatrix[a,b] == 0:
+                            pathMask[a,b] = True
+                        else: pathMask[a,b] = False
+                return pathMask
         return Intersection
     
     # Obtains centroid of coordinates given
@@ -457,24 +454,53 @@ def CustomSegmentation(kidney, OverlapOrgan, PET_Image):
     # Returns the direction vector for two input positions
     def Check_Direction(Centroid, c, d):
         # Check for the LocalMinima points "Use local minima coordinate with the direction from the origin of the mask to determine left and right/top and down filling direction"
-        Direction_Vector = np.subtract(Centroid, np.array([c,d]))
-        Magnitude = np.linalg.norm(Direction_Vector)
-        Direction_Vector = Direction_Vector/Magnitude
-        return Direction_Vector
-    
+            Direction_Vector = np.subtract(Centroid, np.array([c,d]))
+            Magnitude = abs(np.linalg.norm(Direction_Vector))
+            Direction_Vector[0] = Direction_Vector[0]/Magnitude
+            Direction_Vector[1] = -Direction_Vector[1]/Magnitude
+            return Direction_Vector
+
     # Fills intersection according to the direction vector
     def FillIntersection():
-        L2Intersection = np.zeros(pathMask.shape, dtype = bool)
-        
+        L2Intersection = np.zeros(PET_Image.shape, bool)
         "Intersection boundries for speed"
         IntersectionCoordsXMax = max(IntersectionCoords[:,0])
         IntersectionCoordsXMin = min(IntersectionCoords[:,0])
         IntersectionCoordsYMax = max(IntersectionCoords[:,1])
         IntersectionCoordsYMin = min(IntersectionCoords[:,1])
         
-        "LEFT FILLING DIRECTION"
-        if Direction_Vector[0] < 0 and abs(Direction_Vector[1]) < 0.7071: # Check unit vector is to left and between 45 degrees (0.7071) vertically
-            
+        "AVERAGE PATH MASK"
+        "BOTTOM DIRECTION"
+        if (Direction_Vector[1] < 0 and abs(Direction_Vector[0]) < 0.7071): # Check unit vector is pointing down and between 45 degrees (0.7071) horizontally
+                        
+            "Average True values of path mask along the Y axis"
+            for d in range(IntersectionCoordsYMin, IntersectionCoordsYMax):
+                for k in range(IntersectionCoordsXMin, IntersectionCoordsXMax):
+                    Sum = 0
+                    if pathMask[d,k]:
+                        for a in range(IntersectionCoordsYMin, IntersectionCoordsYMax):
+                            if pathMask[a,k]:
+                                Sum +=1
+                                pathMask[a,k] = False
+                        pathMask[d+int(Sum/2),k] = True
+        
+        "TOP DIRECTION"
+        if Direction_Vector[1] > 0 and abs(Direction_Vector[0]) < 0.7071: # Check unit vector is pointing up and between 45 degrees (0.7071) horizontally
+        
+            "Average True values of path mask along the Y axis"
+            for d in range(IntersectionCoordsYMin, IntersectionCoordsYMax):
+                for k in range(IntersectionCoordsXMin, IntersectionCoordsXMax):
+                    Sum = 0
+                    if pathMask[d,k]:
+                        for a in range(IntersectionCoordsYMin, IntersectionCoordsYMax):
+                            if pathMask[a,k]:
+                                Sum +=1
+                                pathMask[a,k] = False
+                        pathMask[d+int(Sum/2),k] = True  
+        
+        "RIGHT DIRECTION"
+        if Direction_Vector[0] > 0 and abs(Direction_Vector[1]) < 0.7071: # Check unit vector is to right and between 45 degrees (0.7071) vertically
+                            
             "Average True values of path mask along the X axis"
             for d in range(IntersectionCoordsYMin, IntersectionCoordsYMax):
                 for k in range(IntersectionCoordsXMin, IntersectionCoordsXMax):
@@ -486,6 +512,23 @@ def CustomSegmentation(kidney, OverlapOrgan, PET_Image):
                                 pathMask[d,a] = False
                         pathMask[d,k+int(Sum/2)] = True
         
+        "LEFT DIRECTION"
+        if Direction_Vector[0] < 0 and abs(Direction_Vector[1]) < 0.7071: # Check unit vector is to left and between 45 degrees (0.7071) vertically
+                    
+                    "Average True values of path mask along the X axis"
+                    for d in range(IntersectionCoordsYMin, IntersectionCoordsYMax):
+                        for k in range(IntersectionCoordsXMin, IntersectionCoordsXMax):
+                            Sum = 0
+                            if pathMask[d,k]:
+                                for a in range(IntersectionCoordsXMin, IntersectionCoordsXMax):
+                                    if pathMask[d,a]:
+                                        Sum +=1
+                                        pathMask[d,a] = False
+                                pathMask[d,k+int(Sum/2)] = True
+                
+        
+        "LEFT FILLING DIRECTION"
+        if Direction_Vector[0] < 0 and abs(Direction_Vector[1]) < 0.7071: # Check unit vector is to left and between 45 degrees (0.7071) vertically
             "Uses path matrix to fill the intersection"
             for c in range(IntersectionCoordsXMin, IntersectionCoordsXMax):
                 for d in range(IntersectionCoordsYMin, IntersectionCoordsYMax):# Loop through intersection coordinates region
@@ -498,18 +541,6 @@ def CustomSegmentation(kidney, OverlapOrgan, PET_Image):
          
         "RIGHT FILLING DIRECTION"
         if Direction_Vector[0] > 0 and abs(Direction_Vector[1]) < 0.7071: # Check unit vector is to right and between 45 degrees (0.7071) vertically
-                            
-            "Average True values of path mask along the X axis"
-            for d in range(IntersectionCoordsYMin, IntersectionCoordsYMax):
-                for k in range(IntersectionCoordsXMin, IntersectionCoordsXMax):
-                    Sum = 0
-                    if pathMask[d,k]:
-                        for a in range(IntersectionCoordsXMin, IntersectionCoordsXMax):
-                            if pathMask[d,a]:
-                                Sum +=1
-                                pathMask[d,a] = False
-                        pathMask[d,k-int(Sum/2)] = True
-                        
             "Uses path matrix to fill the intersection"
             for c in range(IntersectionCoordsXMin, IntersectionCoordsXMax):
                 for d in range(IntersectionCoordsYMin, IntersectionCoordsYMax): # Loop through intersection coordinates region
@@ -520,47 +551,8 @@ def CustomSegmentation(kidney, OverlapOrgan, PET_Image):
                                 # Set all points (Limited to intersection points and less than local minima) to the PET image. 
                                 # IntersectionCoords[a,1] == d leftIntersection matrix is updated only when the y coord is the same as the Localminia y coord
                 
-        "TOP FILLING DIRECTION"
-        if (Direction_Vector[1] < 0 and abs(Direction_Vector[0]) < 0.7071): # Check unit vector is pointing up and between 45 degrees (0.7071) horizontally
-                        
-            "Average True values of path mask along the Y axis"
-            for d in range(IntersectionCoordsYMin, IntersectionCoordsYMax):
-                for k in range(IntersectionCoordsXMin, IntersectionCoordsXMax):
-                    Sum = 0
-                    if pathMask[d,k]:
-                        for a in range(IntersectionCoordsYMin, IntersectionCoordsYMax):
-                            if pathMask[a,k]:
-                                Sum +=1
-                                pathMask[a,k] = False
-                        pathMask[d-int(Sum/2),k] = True
-        
-            "Uses path matrix to fill the intersection"
-            for c in range(IntersectionCoordsXMin, IntersectionCoordsXMax):
-                for d in range(IntersectionCoordsYMin, IntersectionCoordsYMax): 
-                # Loop through intersection coordinates region
-                    if pathMask[d,c]:
-                    # Check for the LocalMinima points
-                        for a in range(IntersectionCoords.shape[0]):
-                        # Loop through every intersection coordinate
-                            if IntersectionCoords[a,0] == c and IntersectionCoords[a,1] < d: #check it is the first local minima with that x coord
-                                L2Intersection[IntersectionCoords[a,1], IntersectionCoords[a,0]] = True
-                                # Set all points (Limited to intersection points and less than local minima) to the PET image. 
-                                # IntersectionCoords[a,0] == c leftIntersection matrix is updated only when the x coord is the same as the Localminia x coord
-            
         "BOTTOM FILLING DIRECTION"
-        if Direction_Vector[1] > 0 and abs(Direction_Vector[0]) < 0.7071: # Check unit vector is pointing up and between 45 degrees (0.7071) horizontally
-        
-            "Average True values of path mask along the Y axis"
-            for d in range(IntersectionCoordsYMin, IntersectionCoordsYMax):
-                for k in range(IntersectionCoordsXMin, IntersectionCoordsXMax):
-                    Sum = 0
-                    if pathMask[d,k]:
-                        for a in range(IntersectionCoordsYMin, IntersectionCoordsYMax):
-                            if pathMask[a,k]:
-                                Sum +=1
-                                pathMask[a,k] = False
-                        pathMask[d+int(Sum/2),k] = True                
-        
+        if Direction_Vector[1] < 0 and abs(Direction_Vector[0]) < 0.7071: # Check unit vector is pointing up and between 45 degrees (0.7071) horizontally
             "Uses path matrix to fill the intersection"
             for c in range(IntersectionCoordsXMin, IntersectionCoordsXMax):
                 for d in range(IntersectionCoordsYMin, IntersectionCoordsYMax): 
@@ -573,11 +565,29 @@ def CustomSegmentation(kidney, OverlapOrgan, PET_Image):
                                 L2Intersection[IntersectionCoords[a,1], IntersectionCoords[a,0]] = True
                                 # Set all points (Limited to intersection points and less than local minima) to the PET image. 
                                 # IntersectionCoords[a,0] == c leftIntersection matrix is updated only when the x coord is the same as the Localminia x coord
+
+            
+        "TOP FILLING DIRECTION"
+        if Direction_Vector[1] > 0 and abs(Direction_Vector[0]) < 0.7071: # Check unit vector is pointing up and between 45 degrees (0.7071) horizontally
+            "Uses path matrix to fill the intersection"
+            for c in range(IntersectionCoordsXMin, IntersectionCoordsXMax):
+                for d in range(IntersectionCoordsYMin, IntersectionCoordsYMax): 
+                # Loop through intersection coordinates region
+                    if pathMask[d,c]:
+                    # Check for the LocalMinima points
+                        for a in range(IntersectionCoords.shape[0]):
+                        # Loop through every intersection coordinate
+                            if IntersectionCoords[a,0] == c and IntersectionCoords[a,1] < d: #check it is the first local minima with that x coord
+                                L2Intersection[IntersectionCoords[a,1], IntersectionCoords[a,0]] = True
+                                # Set all points (Limited to intersection points and less than local minima) to the PET image. 
+                                # IntersectionCoords[a,0] == c leftIntersection matrix is updated only when the x coord is the same as the Localminia x coord
+
         return L2Intersection
+
 
     # Checks for true value in the kidney matrix before beginning any processing. This would be false if theres no kidney segmentation in the section of the CT image.
     if np.any(kidney):
-    
+        
         # High recursion limit for this process from path finding code
         sys.setrecursionlimit(1000000)
         
@@ -606,6 +616,8 @@ def CustomSegmentation(kidney, OverlapOrgan, PET_Image):
             
             "Create Direction (unit) Vector"
             Direction_Vector = Check_Direction(Centroid, centroid[0], centroid[1])
+            
+            "Rotate pathmask before and after averaging"
             
             "Find the image/matrix with a path through it converted to boolean"
             pathMask = Watershed(PET_Image)
@@ -649,19 +661,19 @@ def ComputeCustom(file_number):
     
     "EXPAND ALL MASKS TO HAVE OVERLAPPING REGIONS"
     #Expands the left kidney
-    lkidney_mask = np.uint8(binary_dilation(lkidney_mask, iterations=8))
+    lkidney_mask = np.uint8(binary_dilation(lkidney_mask, iterations=7))
     
     #Remove holes
-    lkidney_mask = np.uint8(binary_closing(lkidney_mask, iterations=8))
+    lkidney_mask = np.uint8(binary_closing(lkidney_mask, iterations=7))
     
     #Expands the spleen
     spleen_mask = np.uint8(binary_dilation(spleen_mask, iterations=3))
     
     #Expands the right kidney
-    rkidney_mask = np.uint8(binary_dilation(rkidney_mask, iterations=8))
+    rkidney_mask = np.uint8(binary_dilation(rkidney_mask, iterations=7))
     
     #Remove holes
-    rkidney_mask = np.uint8(binary_closing(rkidney_mask, iterations=8))
+    rkidney_mask = np.uint8(binary_closing(rkidney_mask, iterations=7))
     
     #Expands the liver
     liver_mask = np.uint8(binary_dilation(liver_mask, iterations=3))
@@ -674,6 +686,7 @@ def ComputeCustom(file_number):
     
     # Loops through each section of the image to apply the watershed and pathfinding segmentation (except where there is no intersection)
     for w in range(0, lkidney_mask.shape[2]):
+        
         PET_Image = ndarray.copy(PET[:,:,w])
         
         lkidney = lkidney_mask[:,:,w]
@@ -697,6 +710,7 @@ if __name__ == '__main__':
     # Empty lists corresponding to methods of project
     SpectFiles = [0] * NumberofFiles
     TotalSegmentatorData = [0] * NumberofFiles
+    PVE_Corrected = [0] * NumberofFiles
     Inhouse_kidney_counts = [0] * NumberofFiles
     Inhouse_kidney_tunable_counts = [0] * NumberofFiles
     Custom_kidney_counts = [0] * NumberofFiles
@@ -711,21 +725,26 @@ if __name__ == '__main__':
             # Updates list with spect files from multiple patients
             SpectFiles[i-1] = OpenSpectFiles(i)
             
-            "OPENS CT FILES AND CREATES AI SEGMENTATIONS"
-            OpenCTFiles(i)
-            TotalSegmentator(i)
-            kidneys = nib.load(path.join(file_r, folder_base, 'kidney_left.nii.gz')) + nib.load(path.join(file_r, folder_base, 'kidney_right.nii.gz'))
-            TotalSegmentatorData[i] = np.sum(kidneys * SpectFiles[i-1])
+            "OPENS CT FILES"
+            #OpenCTFiles(i)
             
-            "METHOD 1 INHOUSE"
-            kidneys_mask1 = spect_mask_inhouse(i)
-            kidneys_mask2 = spect_mask_inhouse_tunable(i,8,2)
+            "METHOD 1 TOTALSEGMENTATOR"
+            #TotalSegmentator(i)
+            #kidneys = np.array(nib.load(path.join(file_r, folder_base, 'kidney_left.nii.gz'))) + np.array(nib.load(path.join(file_r, folder_base, 'kidney_right.nii.gz')))
+            #TotalSegmentatorData[i] = np.sum(kidneys * SpectFiles[i-1])
+            
+            "METHOD 2 PVE CORRECTION"
+            #PVE_Corrected[i] = np.sum(kidneys * SpectFiles[i-1] / 0.643)
+            
+            "METHOD 3 INHOUSE & TUNABLE"
+            #kidneys_mask1 = spect_mask_inhouse(i)
+            #kidneys_mask2 = spect_mask_inhouse_tunable(i,8,2)
             
             # Updates list with data from each patients inhouse segmentation
-            Inhouse_kidney_counts[i-1] = np.sum(kidneys_mask1 * SpectFiles[i-1])
-            Inhouse_kidney_tunable_counts[i-1] = np.sum(kidneys_mask2 * SpectFiles[i-1])
+            #Inhouse_kidney_counts[i-1] = np.sum(kidneys_mask1 * SpectFiles[i-1])
+            #Inhouse_kidney_tunable_counts[i-1] = np.sum(kidneys_mask2 * SpectFiles[i-1])
             
-            "CUSTOM SEGMENTATION"
+            "METHOD 4 SPECT HISTOGRAM BASED"
             # Computes custom segmentation edit based on watershed and path finding
             kidneys = ComputeCustom(i)
             
