@@ -526,7 +526,7 @@ def CustomSegmentation(kidney, OverlapOrgan, PET_Image):
                                         pathMask[d,a] = False
                                 pathMask[d,k+int(Sum/2)] = True
                 
-        
+        "FILL INTERSECTION"
         "LEFT FILLING DIRECTION"
         if Direction_Vector[0] < 0 and abs(Direction_Vector[1]) < 0.7071: # Check unit vector is to left and between 45 degrees (0.7071) vertically
             "Uses path matrix to fill the intersection"
@@ -583,7 +583,6 @@ def CustomSegmentation(kidney, OverlapOrgan, PET_Image):
                                 # IntersectionCoords[a,0] == c leftIntersection matrix is updated only when the x coord is the same as the Localminia x coord
 
         return L2Intersection
-
 
     # Checks for true value in the kidney matrix before beginning any processing. This would be false if theres no kidney segmentation in the section of the CT image.
     if np.any(kidney):
@@ -661,19 +660,19 @@ def ComputeCustom(file_number):
     
     "EXPAND ALL MASKS TO HAVE OVERLAPPING REGIONS"
     #Expands the left kidney
-    lkidney_mask = np.uint8(binary_dilation(lkidney_mask, iterations=7))
+    lkidney_mask = np.uint8(binary_dilation(lkidney_mask, iterations=6))
     
     #Remove holes
-    lkidney_mask = np.uint8(binary_closing(lkidney_mask, iterations=7))
+    lkidney_mask = np.uint8(binary_closing(lkidney_mask, iterations=10))
     
     #Expands the spleen
     spleen_mask = np.uint8(binary_dilation(spleen_mask, iterations=3))
     
     #Expands the right kidney
-    rkidney_mask = np.uint8(binary_dilation(rkidney_mask, iterations=7))
+    rkidney_mask = np.uint8(binary_dilation(rkidney_mask, iterations=6))
     
     #Remove holes
-    rkidney_mask = np.uint8(binary_closing(rkidney_mask, iterations=7))
+    rkidney_mask = np.uint8(binary_closing(rkidney_mask, iterations=10))
     
     #Expands the liver
     liver_mask = np.uint8(binary_dilation(liver_mask, iterations=3))
@@ -738,18 +737,18 @@ if __name__ == '__main__':
             
             "METHOD 3 INHOUSE & TUNABLE"
             #kidneys_mask1 = spect_mask_inhouse(i)
-            #kidneys_mask2 = spect_mask_inhouse_tunable(i,8,2)
+            #kidneys_mask2 = spect_mask_inhouse_tunable(i,7,2)
             
             # Updates list with data from each patients inhouse segmentation
             #Inhouse_kidney_counts[i-1] = np.sum(kidneys_mask1 * SpectFiles[i-1])
             #Inhouse_kidney_tunable_counts[i-1] = np.sum(kidneys_mask2 * SpectFiles[i-1])
             
-            "METHOD 4 SPECT HISTOGRAM BASED"
+            "METHOD 4 SPECT HISTOGRAM BASED ****SLOWEST****"
             # Computes custom segmentation edit based on watershed and path finding
-            kidneys = ComputeCustom(i)
+            #kidneys = ComputeCustom(i)
             
             # Updates list with each patients data from custom segmentation
-            Custom_kidney_counts[i-1] = np.sum(kidneys * SpectFiles[i-1])
+            #Custom_kidney_counts[i-1] = np.sum(kidneys * SpectFiles[i-1]) 17
             
         '''
         plt.imshow(PET_Image)
