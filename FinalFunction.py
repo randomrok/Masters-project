@@ -394,8 +394,11 @@ def CustomSegmentation(kidney, OverlapOrgan, PET_Image):
     
     # uses path finder and stepminus to subtract until there is a path, speed is inverse to stepsize and accuracy
     def Watershed(image):
+        
+        imageMatrix = image * Intersection + ((np.ones(image.shape, dtype=bool) ^ Intersection)*(np.amax(image*Intersection)*2)) # set equal to ones everywhere outside intersection
+        imageMatrix = StepMinus(imageMatrix, np.amin(imageMatrix)) # This speeds up the process as every pixel now starts closer to zero, by the minimum value
+        
         stepsize = np.amax(image*Intersection)/20
-        imageMatrix = image * Intersection + ((np.ones(image.shape, dtype=bool) ^ Intersection)*(np.amax(image*Intersection)+2*stepsize)) # set equal to ones everywhere outside intersection
         PathMatrix = ndarray.copy(imageMatrix)
         pathMask = np.zeros(image.shape, dtype=bool)
         
@@ -660,19 +663,19 @@ def ComputeCustom(file_number):
     
     "EXPAND ALL MASKS TO HAVE OVERLAPPING REGIONS"
     #Expands the left kidney
-    lkidney_mask = np.uint8(binary_dilation(lkidney_mask, iterations=6))
+    lkidney_mask = np.uint8(binary_dilation(lkidney_mask, iterations=5))
     
     #Remove holes
-    lkidney_mask = np.uint8(binary_closing(lkidney_mask, iterations=10))
+    lkidney_mask = np.uint8(binary_closing(lkidney_mask, iterations=4))
     
     #Expands the spleen
     spleen_mask = np.uint8(binary_dilation(spleen_mask, iterations=3))
     
     #Expands the right kidney
-    rkidney_mask = np.uint8(binary_dilation(rkidney_mask, iterations=6))
+    rkidney_mask = np.uint8(binary_dilation(rkidney_mask, iterations=5))
     
     #Remove holes
-    rkidney_mask = np.uint8(binary_closing(rkidney_mask, iterations=10))
+    rkidney_mask = np.uint8(binary_closing(rkidney_mask, iterations=4))
     
     #Expands the liver
     liver_mask = np.uint8(binary_dilation(liver_mask, iterations=3))
@@ -745,10 +748,10 @@ if __name__ == '__main__':
             
             "METHOD 4 SPECT HISTOGRAM BASED ****SLOWEST****"
             # Computes custom segmentation edit based on watershed and path finding
-            #kidneys = ComputeCustom(i)
+            kidneys = ComputeCustom(i)
             
             # Updates list with each patients data from custom segmentation
-            #Custom_kidney_counts[i-1] = np.sum(kidneys * SpectFiles[i-1]) 17
+            Custom_kidney_counts[i-1] = np.sum(kidneys * SpectFiles[i-1])
             
         '''
         plt.imshow(PET_Image)
