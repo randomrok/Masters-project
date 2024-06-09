@@ -382,8 +382,15 @@ def CustomSegmentation(kidney, OverlapOrgan, PET_Image):
     
     # Minus stepsize from all pixels intensity unless zero
     def StepMinus(matrix, stepsize):
-        for a in range (matrix.shape[0]):
-            for b in range (matrix.shape[1]): # loop through matrix
+        
+        # limit the function to only the intersection region, should reduce the time per iteration.
+        IntersectionCoordsXMax = max(IntersectionCoords[:,0])
+        IntersectionCoordsXMin = min(IntersectionCoords[:,0])
+        IntersectionCoordsYMax = max(IntersectionCoords[:,1])
+        IntersectionCoordsYMin = min(IntersectionCoords[:,1])
+        
+        for a in range (IntersectionCoordsXMin, IntersectionCoordsXMax):
+            for b in range (IntersectionCoordsYMin, IntersectionCoordsYMax): # loop through matrix
                 
                 if matrix[a,b] > stepsize:
                     matrix[a,b] = matrix[a,b] - stepsize
@@ -619,7 +626,7 @@ def CustomSegmentation(kidney, OverlapOrgan, PET_Image):
             "Create Direction (unit) Vector"
             Direction_Vector = Check_Direction(Centroid, centroid[0], centroid[1])
             
-            "Rotate pathmask before and after averaging"
+            "Rotate both pathmask and image before averaging then multiply by PET and output counts"
             
             "Find the image/matrix with a path through it converted to boolean"
             pathMask = Watershed(PET_Image)
@@ -669,7 +676,7 @@ def ComputeCustom(file_number):
     lkidney_mask = np.uint8(binary_closing(lkidney_mask, iterations=4))
     
     #Expands the spleen
-    spleen_mask = np.uint8(binary_dilation(spleen_mask, iterations=3))
+    spleen_mask = np.uint8(binary_dilation(spleen_mask, iterations=1))
     
     #Expands the right kidney
     rkidney_mask = np.uint8(binary_dilation(rkidney_mask, iterations=5))
@@ -678,7 +685,7 @@ def ComputeCustom(file_number):
     rkidney_mask = np.uint8(binary_closing(rkidney_mask, iterations=4))
     
     #Expands the liver
-    liver_mask = np.uint8(binary_dilation(liver_mask, iterations=3))
+    liver_mask = np.uint8(binary_dilation(liver_mask, iterations=1))
     
     # Creates empty lists to store the sections of the segmentations ie. [:,:,0] ... [:,:,130]
     mask1 = [0] * lkidney_mask.shape[2]
